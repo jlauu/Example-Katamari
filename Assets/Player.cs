@@ -3,15 +3,14 @@ using System.Collections;
 
 public class Player : MonoBehaviour {
 	// Components
-	private CharacterController cc;
 	private Katamari katamari;
 	private Camera playerCam;
-
 	// Physics
+	public float maxSpeed = 1.0f;
 	public float baseSpeed = 0.5f;
 	public float baseTurnSpeed = 1.5f;
+	public float friction = 0.85f;
 	private Vector3 velocity;
-	private Vector3 gravity;
 
 	// Input
 	private float vert;
@@ -23,18 +22,32 @@ public class Player : MonoBehaviour {
 	public float minCamRot = 20.0f;
 	public float maxCamRot = 35.0f;
 
+	// Properties
+	private float _radius;
+	public float radius { get { return _radius; } }
+	private bool inControl;
+	private float playCamDistScale = 1.0f;
+
 	// Use this for initialization
-	void Start () {
-		cc = GetComponent<CharacterController> ();
+	void Awake () {
+		initializeKatamari ();
+		velocity = Vector3.zero;
+		inControl = false;
+	}
+
+	void initializeKatamari () {
+		// TODO: dynamic creation for player spawn
 		katamari = GetComponentInChildren<Katamari> ();
 		playerCam = GetComponentInChildren<Camera> ();
-		velocity = Vector3.zero;
-		gravity = Vector3.down * 0.6f;
+
 	}
-	
+
+	void Start() {
+		inControl = true;
+	}
+
 	// Update is called once per frame
 	void Update () {
-		velocity = velocity * 0.9f;
 		updateControls ();
 		updatePhysics ();
 		updatePosition ();
@@ -42,29 +55,53 @@ public class Player : MonoBehaviour {
 	}
 
 	void updateControls () {
-		vert = Input.GetAxis ("Vertical");
-		hori = Input.GetAxis ("Horizontal");
+		if (inControl) {
+			vert = Input.GetAxis ("Vertical");
+			hori = Input.GetAxis ("Horizontal");
+		} else {
+			vert = 0;
+			hori = 0;
+		}
 
 		mouseX = Input.GetAxis ("Mouse X");
 		mouseY = Input.GetAxis ("Mouse Y");
 	}
 	
 	void updatePhysics () {
+		// Fix input to unit vector
 		Vector3 z = Mathf.Sin (Mathf.Asin (vert)) * transform.forward;
 		Vector3 x = Mathf.Cos (Mathf.Acos (hori)) * transform.right;
-		velocity = z + x;
-		velocity *= baseSpeed;
+
+		// Update velocity
+		velocity += baseSpeed * (z + x);
+		velocity = Vector3.ClampMagnitude (velocity * friction, 1);
+
+		// TODO: Hard collisions and loss-of-control
 	}
 
 	void updatePosition() {
+		// Forward spin
 		transform.RotateAround (transform.position, Vector3.up, mouseX * baseTurnSpeed);
+
+		// New Position
 		transform.position = transform.position + velocity;
+
+		// Handles rolling animation
 		katamari.roll (velocity);
 	}
 
 	void updateCamera() {
-		playerCam.transform.RotateAround (transform.position, transform.right, mouseY);
-		float angle = playerCam.transform.localEulerAngles.x;
-		print (angle);
+		Transform pcamTrans = playerCam.transform;
+		Transform kataTrans = katamari.transform;
+
+		// Vertical tilt
+		pcamTrans.RotateAround (transform.position, transform.right, mouseY * -baseTurnSpeed);
+
+		// Fix distance
+		float dist = 2 * katamari.radius * playCamDistScale;
+		Vector3 dir = (pcamTrans.position - kataTrans.position).normalized;
+		pcamTrans.position = kataTrans.position + dist * dir;
+
+		// TODO: clamping vertical angle
 	}
 }
